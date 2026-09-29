@@ -39,6 +39,7 @@ class UvcCamera(
         /** Give up on a negotiated mode if no frame arrives within this time and try the next candidate. */
         private const val NO_FRAME_FALLBACK_MS = 4_000L
         private const val MAX_FALLBACK_MODES = 4
+        private const val UVC_ERROR_BUSY = -6
     }
 
     sealed class State {
@@ -103,10 +104,22 @@ class UvcCamera(
         runCatching { NativeUvc.nativeLastLog() }.getOrNull()?.lines()?.filter { it.isNotBlank() }?.forEach { log("  $it") }
     }
 
+    private val starting = AtomicBoolean(false)
+
     /** Open the device and start streaming. Must be called with USB permission already granted. */
-    @Synchronized
     fun start(device: UsbDevice): Boolean {
         if (running.get()) return true
+        if (!starting.compareAndSet(false, true)) return true
+        try {
+            return startInternal(device)
+        } finally {
+            starting.set(false)
+        }
+    }
+
+    private fun startInternal(device: UsbDevice): Boolean {
+        // Never hold two sessions: a leftover connection keeps the interfaces claimed → "Busy".
+        if (connection != null || thread != null) stop()
         _state.value = State.Opening
         _log.value = emptyList()
         log("Opening ${monitor.describe(device)}")
@@ -114,7 +127,7 @@ class UvcCamera(
         if (!NativeUvc.ensureLoaded()) {
             fail("Native UVC library failed to load", NativeUvc.loadError); return false
         }
-        val conn = monitor.openDevice(device)
+        var conn = monitor.openDevice(device)
         if (conn == null) { fail("UsbManager.openDevice returned null (permission?)"); return false }
         connection = conn
         currentDevice = device
@@ -136,6 +149,22 @@ class UvcCamera(
         log(NativeUvc.nativeVersion())
         devHandle = NativeUvc.nativeOpen(ctxHandle, conn.fileDescriptor)
         drainNativeLog()
+        if (devHandle.toInt() == UVC_ERROR_BUSY) {
+            // The interface is claimed by another open handle: a stale one of ours, or another app
+            // (e.g. the Fluke iSee app auto-opening the camera). Reopen once after a short pause.
+            log("Interface busy; closing our handle and retrying in 1 s")
+            runCatching { conn.close() }
+            Thread.sleep(1000)
+            conn = monitor.openDevice(device)
+            if (conn == null) { fail("UsbManager.openDevice returned null on retry"); return false }
+            connection = conn
+            devHandle = NativeUvc.nativeOpen(ctxHandle, conn.fileDescriptor)
+            drainNativeLog()
+        }
+        if (devHandle.toInt() == UVC_ERROR_BUSY) {
+            fail("Camera is busy: another app has it open", "Close the Fluke iSee app (and any USB camera app), unplug the camera, plug it back in and choose RoboDog. fd=${conn.fileDescriptor}")
+            return false
+        }
         if (devHandle <= 0) { fail("uvc_wrap failed: ${NativeUvc.nativeStrError(devHandle.toInt())}", "fd=${conn.fileDescriptor}"); return false }
         _nativeDescription.value = NativeUvc.nativeDescribe(devHandle)
         log("libuvc opened the device")
@@ -285,14 +314,15 @@ class UvcCamera(
      * it exits, and it needs the lock for that, so we must not hold it while joining.
      */
     fun stop() {
-        if (!running.get() && connection == null) return
+        if (!running.get() && connection == null && thread == null) return
         log("Stopping stream")
         running.set(false)
         val t = thread
-        t?.join(5000)
+        t?.join(8000)
         thread = null
-        // If the thread never ran or is stuck, release here (idempotent).
-        if (t == null || !t.isAlive) releaseNative()
+        if (t != null && t.isAlive) log("WARNING: stream thread did not stop in time")
+        // Idempotent: the thread normally releases on exit; this covers the never-started case.
+        releaseNative()
         _state.value = State.Idle
         _latestFrame.value = null
         _stats.value = Stats()
