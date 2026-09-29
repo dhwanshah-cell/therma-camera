@@ -362,8 +362,12 @@ static int op_init(struct libusb_context *ctx)
 	int r;
 	struct linux_context_priv *cpriv = (struct linux_context_priv *)usbi_get_context_priv(ctx);
 
-	if (get_kernel_version(ctx, &kversion) < 0)
-		return LIBUSB_ERROR_OTHER;
+	if (get_kernel_version(ctx, &kversion) < 0) {
+		/* RoboDog/Android: some vendor kernels report unusual release strings.
+		 * Assume a modern kernel instead of refusing to initialise. */
+		usbi_warn(ctx, "could not determine kernel version; assuming 5.4");
+		kversion.major = 5; kversion.minor = 4; kversion.sublevel = 0;
+	}
 
 	if (!kernel_version_ge(&kversion, 2, 6, 32)) {
 		usbi_err(ctx, "kernel version is too old (reported as %d.%d.%d)",

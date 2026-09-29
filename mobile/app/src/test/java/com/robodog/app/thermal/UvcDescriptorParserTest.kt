@@ -86,11 +86,12 @@ class UvcDescriptorParserTest {
         assertEquals("INTERRUPT", d.interfaces.first { it.number == 0 }.endpoints.single().transferType)
     }
 
-    @Test fun selectsNativeYuy2OverStackedAndMjpeg() {
+    @Test fun selectsStackedYuy2OverNativeAndMjpeg() {
         val mode = UvcModeSelector.select(UvcDescriptorParser.parse(blob()))!!
-        assertEquals(1, mode.format.formatIndex); assertEquals(1, mode.frame.frameIndex)
-        assertEquals(256, mode.frame.width); assertEquals(192, mode.frame.height)
+        assertEquals(1, mode.format.formatIndex); assertEquals(2, mode.frame.frameIndex)
+        assertEquals(256, mode.frame.width); assertEquals(384, mode.frame.height)
         assertEquals(400_000L, mode.frameInterval)
+        assertTrue(mode.reason.contains("stacked"))
     }
 
     @Test fun forcedModeIsHonoured() {

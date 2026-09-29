@@ -7,8 +7,8 @@ import com.robodog.app.core.RoboDogConstants
  * descriptors actually advertise. Preference order for a thermal imager:
  *
  * 1. Uncompressed single-channel 16-bit (Y16) at the native thermal resolution
- * 2. Uncompressed YUY2/UYVY/NV12 at the native thermal resolution (or a stacked
- *    "image + raw" layout with double height, as some 256x192 modules use)
+ * 2. Uncompressed YUY2/UYVY/NV12 as a stacked "image + raw" double-height frame (the
+ *    TC01A advertises 256x384), then at the native 256x192 resolution
  * 3. Any uncompressed frame
  * 4. MJPEG (decoded on the phone; no raw intensity)
  *
@@ -61,8 +61,11 @@ object UvcModeSelector {
         val exact = fr.width == pref.preferredWidth && fr.height == pref.preferredHeight
         val stacked = fr.width == pref.preferredWidth && fr.height == pref.preferredHeight * 2
         s += when {
+            // The TC01A advertises YUY2 256x192 and 256x384. The taller frame carries the image in
+            // the top half and raw sensor data below, so prefer it: the display is identical and
+            // the raw half becomes available to an (opt-in) radiometric decoder.
+            stacked -> 210
             exact -> 200
-            stacked -> 180 // image + raw data stacked vertically (seen on several 256x192 modules)
             fr.width == pref.preferredWidth -> 80
             else -> 0
         }

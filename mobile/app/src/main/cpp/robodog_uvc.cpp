@@ -14,6 +14,8 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cerrno>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -30,6 +32,30 @@ extern "C" {
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace {
+
+// Ring buffer of libusb log lines so the app can show *why* something failed.
+std::mutex g_logMutex;
+std::deque<std::string> g_log;
+void pushLog(const std::string& line) {
+    std::lock_guard<std::mutex> lock(g_logMutex);
+    g_log.push_back(line);
+    while (g_log.size() > 60) g_log.pop_front();
+}
+void LIBUSB_CALL libusbLogCb(libusb_context*, enum libusb_log_level level, const char* str) {
+    const char* lv = level == LIBUSB_LOG_LEVEL_ERROR ? "E" : level == LIBUSB_LOG_LEVEL_WARNING ? "W" : level == LIBUSB_LOG_LEVEL_INFO ? "I" : "D";
+    std::string line = std::string("libusb ") + lv + ": " + (str ? str : "");
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+    pushLog(line);
+    __android_log_print(level == LIBUSB_LOG_LEVEL_ERROR ? ANDROID_LOG_ERROR : ANDROID_LOG_INFO, LOG_TAG, "%s", line.c_str());
+}
+std::string drainLog() {
+    std::lock_guard<std::mutex> lock(g_logMutex);
+    std::string out;
+    for (auto& l : g_log) { out += l; out += '\n'; }
+    g_log.clear();
+    return out;
+}
+bool g_logInstalled = false;
 
 struct UvcContext {
     libusb_context* usb = nullptr;
@@ -131,14 +157,32 @@ extern "C" {
 JNIEXPORT jlong JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeInit(JNIEnv*, jobject) {
     auto* ctx = new UvcContext();
+    if (!g_logInstalled) {
+        libusb_set_option(nullptr, LIBUSB_OPTION_LOG_CB, libusbLogCb);
+        libusb_set_option(nullptr, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
+        g_logInstalled = true;
+    }
     // Android: we must not scan /dev/bus/usb (no permission); use the fd handed by Java.
-    libusb_set_option(nullptr, LIBUSB_OPTION_NO_DEVICE_DISCOVERY);
+    int so = libusb_set_option(nullptr, LIBUSB_OPTION_NO_DEVICE_DISCOVERY);
+    pushLog(std::string("set_option(NO_DEVICE_DISCOVERY) = ") + std::to_string(so));
+    errno = 0;
     int r = libusb_init(&ctx->usb);
+    if (r != LIBUSB_SUCCESS) {
+        pushLog(std::string("libusb_init failed: ") + libusb_strerror(r) + " (" + std::to_string(r) + "), errno=" + std::to_string(errno));
+        // Retry with the option passed explicitly to the context constructor.
+        struct libusb_init_option opts[1];
+        opts[0].option = LIBUSB_OPTION_NO_DEVICE_DISCOVERY;
+        opts[0].value.ival = 1;
+        errno = 0;
+        r = libusb_init_context(&ctx->usb, opts, 1);
+        pushLog(std::string("libusb_init_context retry = ") + std::to_string(r) + ", errno=" + std::to_string(errno));
+    }
     if (r != LIBUSB_SUCCESS) {
         LOGE("libusb_init failed: %s", libusb_strerror(r));
         delete ctx;
         return static_cast<jlong>(r);
     }
+    libusb_set_option(ctx->usb, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_INFO);
     uvc_error_t ur = uvc_init(&ctx->uvc, ctx->usb);
     if (ur != UVC_SUCCESS) {
         LOGE("uvc_init failed: %s", uvc_strerror(ur));
@@ -170,8 +214,10 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeOpen(JNIEnv*, jobject, jlong ct
     auto* dev = new UvcDevice();
     dev->ctx = ctx;
     dev->fd = fd;
+    errno = 0;
     uvc_error_t r = uvc_wrap(fd, ctx->uvc, &dev->devh);
     if (r != UVC_SUCCESS) {
+        pushLog(std::string("uvc_wrap failed: ") + uvc_strerror(r) + " (" + std::to_string(r) + "), errno=" + std::to_string(errno));
         LOGE("uvc_wrap(fd=%d) failed: %s (%d)", fd, uvc_strerror(r), r);
         delete dev;
         return static_cast<jlong>(r);
@@ -422,6 +468,12 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStopStream(JNIEnv*, jobject, jl
 JNIEXPORT jstring JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStrError(JNIEnv* env, jobject, jint code) {
     return toJString(env, uvc_strerror(static_cast<uvc_error_t>(code)));
+}
+
+/** Returns and clears the captured libusb/driver log lines (newline separated). */
+JNIEXPORT jstring JNICALL
+Java_com_robodog_app_thermal_uvc_NativeUvc_nativeLastLog(JNIEnv* env, jobject) {
+    return toJString(env, drainLog());
 }
 
 JNIEXPORT jstring JNICALL

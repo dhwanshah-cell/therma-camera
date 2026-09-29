@@ -95,7 +95,12 @@ class UvcCamera(
 
     private fun log(msg: String) {
         Log.i(TAG, msg)
-        _log.value = (_log.value + "${java.time.LocalTime.now().withNano(0)} $msg").takeLast(80)
+        _log.value = (_log.value + "${java.time.LocalTime.now().withNano(0)} $msg").takeLast(120)
+    }
+
+    /** Pull libusb's own log lines into the visible connection log. */
+    private fun drainNativeLog() {
+        runCatching { NativeUvc.nativeLastLog() }.getOrNull()?.lines()?.filter { it.isNotBlank() }?.forEach { log("  $it") }
     }
 
     /** Open the device and start streaming. Must be called with USB permission already granted. */
@@ -126,9 +131,11 @@ class UvcCamera(
 
         // 2. Hand the fd to libusb/libuvc.
         ctxHandle = NativeUvc.nativeInit()
-        if (ctxHandle <= 0) { fail("libusb/libuvc init failed", NativeUvc.nativeStrError(ctxHandle.toInt())); return false }
+        drainNativeLog()
+        if (ctxHandle <= 0) { fail("libusb/libuvc init failed (${ctxHandle})", NativeUvc.nativeStrError(ctxHandle.toInt())); return false }
         log(NativeUvc.nativeVersion())
         devHandle = NativeUvc.nativeOpen(ctxHandle, conn.fileDescriptor)
+        drainNativeLog()
         if (devHandle <= 0) { fail("uvc_wrap failed: ${NativeUvc.nativeStrError(devHandle.toInt())}", "fd=${conn.fileDescriptor}"); return false }
         _nativeDescription.value = NativeUvc.nativeDescribe(devHandle)
         log("libuvc opened the device")
@@ -171,6 +178,7 @@ class UvcCamera(
             val mode = candidates[modeIndex]
             log("Trying mode ${modeIndex + 1}/${candidates.size}: $mode (${mode.reason})")
             val handle = NativeUvc.nativeStartStream(devHandle, mode.format.formatIndex, mode.frame.frameIndex, mode.frameInterval.toInt())
+            drainNativeLog()
             if (handle <= 0) {
                 log("Negotiation failed: ${NativeUvc.nativeStrError(handle.toInt())}")
                 modeIndex++
@@ -192,6 +200,7 @@ class UvcCamera(
                 val n = NativeUvc.nativeGetFrame(handle, buffer, info, FRAME_TIMEOUT_US)
                 if (n < 0) {
                     log("Frame read error: ${NativeUvc.nativeStrError(n)}")
+                    drainNativeLog()
                     break
                 }
                 if (n == 0) {

@@ -50,6 +50,8 @@ object NativeUvc {
     external fun nativeStopStream(streamHandle: Long)
 
     external fun nativeStrError(code: Int): String
+    /** Captured libusb/driver log lines since the last call (for diagnostics). */
+    external fun nativeLastLog(): String
     external fun nativeVersion(): String
 
     /** libuvc's enum uvc_frame_format ordinals (kept in sync with libuvc.h). */
