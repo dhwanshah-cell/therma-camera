@@ -1,0 +1,24 @@
+{
+  "name": "robodog-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "RoboDog search-and-rescue robot: Android onboard app, backend API and web command center",
+  "workspaces": [
+    "shared",
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w web",
+    "dev": "npm run dev:server & npm run dev:web",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "dev:sim": "ROBODOG_SIMULATION=true npm run dev -w server",
+    "test": "npm run test -w shared && npm run test -w server && npm run test -w web",
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w web",
+    "lint": "npm run lint -w server && npm run lint -w web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

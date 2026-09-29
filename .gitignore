@@ -1,0 +1,30 @@
+# Node
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.env
+.env.local
+
+# Server runtime data (database + media live outside git)
+server/data/
+server/media/
+
+# Android
+mobile/.gradle/
+mobile/build/
+mobile/app/build/
+mobile/app/.cxx/
+mobile/local.properties
+mobile/.idea/
+mobile/*.iml
+mobile/app/*.iml
+mobile/captures/
+mobile/.kotlin/
+*.apk
+*.aab
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">RoboDog</string>
+    <string name="notification_channel_name">RoboDog onboard service</string>
+    <string name="notification_channel_description">Keeps sensors, thermal camera and sync running</string>
+</resources>

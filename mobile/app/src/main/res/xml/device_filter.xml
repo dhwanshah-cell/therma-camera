@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fluke iSee TC01A thermal camera as identified on the connected device.
+     Decimal values: 0x0F7E = 3966, 0x00BC = 188. -->
+<resources>
+    <usb-device vendor-id="3966" product-id="188" />
+    <!-- Any other UVC video device (class 14 = Video, subclass 1 = VideoControl) -->
+    <usb-device class="14" subclass="1" />
+    <!-- Interface-association style devices: match on the video interface class -->
+    <usb-device class="239" subclass="2" protocol="1" />
+</resources>
