@@ -39,7 +39,9 @@ ESP32 (Wi-Fi AP) ─HTTP───┘                 └──► live WebSocket
 ## Fastest way to run it
 
 * **Phone app**: open https://github.com/dhwanshah-cell/therma-camera/releases/tag/latest-apk on the phone,
-  download `robodog.apk`, tap it, allow the install. GitHub rebuilds it on every push.
+  download `robodog.apk`, tap it, allow the install. GitHub rebuilds it on every push, and the installed
+  app then offers **UPDATE** on its HOME screen (Settings → App update) which installs in place. All builds
+  are signed with the committed development key in `mobile/app/keystore/`.
 * **Laptop dashboard (Windows)**: double-click `start-robodog.cmd` (or `start-robodog-simulation.cmd` for
   labelled fake data). Needs Node.js installed once. macOS/Linux: `./start-robodog.sh`.
 * **Install over USB instead**: `install-app.cmd` downloads adb and the APK and installs it (USB debugging on).

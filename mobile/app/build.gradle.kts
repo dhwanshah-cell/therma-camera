@@ -15,8 +15,12 @@ android {
         applicationId = "com.robodog.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // GitHub Actions passes its run number so every published build has a higher versionCode.
+        val buildNumber = (project.findProperty("robodogVersionCode") as String?)?.toIntOrNull() ?: 1
+        versionCode = buildNumber
+        versionName = "0.1.$buildNumber"
+        buildConfigField("String", "UPDATE_MANIFEST_URL", "\"https://github.com/dhwanshah-cell/therma-camera/releases/download/latest-apk/version.json\"")
+        buildConfigField("String", "GIT_COMMIT", "\"${(project.findProperty("robodogCommit") as String?) ?: "local"}\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Safe development default for the backend token. Override in Settings inside the app.
@@ -41,10 +45,24 @@ android {
         }
     }
 
+    // One fixed development key for debug and release so updates install in place.
+    signingConfigs {
+        create("robodog") {
+            storeFile = file("keystore/robodog.jks")
+            storePassword = "robodog-dev"
+            keyAlias = "robodog"
+            keyPassword = "robodog-dev"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("robodog")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("robodog")
         }
     }
     compileOptions {

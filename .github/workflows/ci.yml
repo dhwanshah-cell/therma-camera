@@ -39,8 +39,12 @@ jobs:
         run: |
           cd mobile
           chmod +x gradlew
-          ./gradlew testDebugUnitTest assembleDebug --no-daemon
+          ./gradlew testDebugUnitTest assembleDebug --no-daemon -ProbodogVersionCode=${{ github.run_number }} -ProbodogCommit=${{ github.sha }}
           cp app/build/outputs/apk/debug/app-debug.apk ../robodog.apk
+          cd ..
+          printf '{"versionCode":%s,"versionName":"0.1.%s","commit":"%s","builtAt":"%s","apkUrl":"https://github.com/%s/releases/download/latest-apk/robodog.apk"}\n' \
+            "${{ github.run_number }}" "${{ github.run_number }}" "${{ github.sha }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${{ github.repository }}" > version.json
+          cat version.json
       - uses: actions/upload-artifact@v4
         with: { name: robodog-apk, path: robodog.apk }
       - name: Publish APK at a fixed download link (releases/latest-apk)
@@ -48,12 +52,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          NOTES="RoboDog Android app, debug build from ${GITHUB_SHA::7} on branch ${GITHUB_REF_NAME}.
+          NOTES="RoboDog Android app build ${GITHUB_RUN_NUMBER} (version 0.1.${GITHUB_RUN_NUMBER}) from ${GITHUB_SHA::7} on branch ${GITHUB_REF_NAME}.
+          Already installed? Open the app: Settings > App update > INSTALL UPDATE (or the UPDATE banner on HOME).
           Open this page on the phone, download robodog.apk, tap it and allow the install.
           Storage on the phone: Pictures/RoboDog/Thermal/Images, Movies/RoboDog/Thermal/Videos, Documents/RoboDog/Thermal/Maps, Pictures/RoboDog/RGB/Images."
           if gh release view latest-apk >/dev/null 2>&1; then
-            gh release upload latest-apk robodog.apk --clobber
+            gh release upload latest-apk robodog.apk version.json --clobber
             gh release edit latest-apk --notes "$NOTES"
           else
-            gh release create latest-apk robodog.apk --prerelease --title "RoboDog app (latest build)" --notes "$NOTES"
+            gh release create latest-apk robodog.apk version.json --prerelease --title "RoboDog app (latest build)" --notes "$NOTES"
           fi

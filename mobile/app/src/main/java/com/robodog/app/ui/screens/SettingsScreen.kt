@@ -87,8 +87,21 @@ fun SettingsScreen(vm: RoboDogViewModel) {
             TextRow("Intensity hotspot threshold 0..1 (no temperature)", settings.intensityHotspotThreshold.toString()) { v -> v.toFloatOrNull()?.let { n -> vm.updateSettings { copy(intensityHotspotThreshold = n.coerceIn(0.5f, 1f)) } } }
         }
 
+        Panel(title = "App update") {
+            val upd by vm.g.updater.state.collectAsState()
+            KeyValue("Installed", "${vm.g.updater.currentVersionName} (build ${vm.g.updater.currentVersionCode}, ${com.robodog.app.BuildConfig.GIT_COMMIT.take(7)})")
+            KeyValue("Latest on GitHub", upd.latest?.let { "${it.versionName} (build ${it.versionCode}, ${it.commit.take(7)})" } ?: if (upd.checking) "checking…" else "--")
+            if (upd.error != null) Text("Check failed: ${upd.error}", color = RdColors.Red, style = MaterialTheme.typography.bodySmall)
+            if (upd.downloading) Text("Downloading… ${upd.progressPct}%", color = RdColors.Amber)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                ActionButton("CHECK FOR UPDATE", enabled = !upd.checking) { vm.checkForUpdate() }
+                ActionButton(if (upd.updateAvailable) "INSTALL UPDATE" else "UP TO DATE", accent = upd.updateAvailable, enabled = upd.updateAvailable && !upd.downloading) { vm.installUpdate() }
+            }
+            Text("Builds are signed with one key, so updates install over the current app and keep its data.", color = RdColors.Muted, style = MaterialTheme.typography.bodySmall)
+        }
+
         Panel(title = "About") {
-            KeyValue("App", "RoboDog 0.1.0")
+            KeyValue("App", "RoboDog ${vm.g.updater.currentVersionName}")
             KeyValue("Storage", "Pictures/RoboDog/Thermal/Images · Movies/RoboDog/Thermal/Videos · Documents/RoboDog/Thermal/Maps · Pictures/RoboDog/RGB/Images")
             KeyValue("Human detection", vm.g.humanDetector.name)
             KeyValue("Pose sources", vm.g.poseRegistry.allPose.joinToString { it.name })

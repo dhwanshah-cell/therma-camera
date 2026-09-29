@@ -47,6 +47,16 @@ fun HomeScreen(vm: RoboDogViewModel, onMissions: () -> Unit, onThermal: () -> Un
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         ScreenTitle("ROBO-DOG", "SEARCH & RESCUE")
+        val upd by vm.g.updater.state.collectAsState()
+        if (upd.updateAvailable) Panel {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("App update available: ${upd.latest?.versionName}", color = RdColors.Amber, style = MaterialTheme.typography.bodyMedium)
+                    Text(if (upd.downloading) "Downloading… ${upd.progressPct}%" else "Installs over the current version, data is kept", color = RdColors.Muted, style = MaterialTheme.typography.bodySmall)
+                }
+                ActionButton("UPDATE", accent = true, enabled = !upd.downloading) { vm.installUpdate() }
+            }
+        }
 
         ThermalView(frame, palette, Modifier.fillMaxWidth().height(200.dp), placeholder = "THERMAL CAMERA NOT STREAMING")
 

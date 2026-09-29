@@ -105,6 +105,7 @@ class RoboDogController(private val g: AppGraph) {
         g.imu.start(activeMissionId) { batch -> scope.launch { g.db.imu().insertAll(batch); if (activeMissionId != null) g.syncQueue.imuBatch(batch) } }
         scope.launch { g.imu.latest.collect { s -> if (s != null) (g.poseRegistry.allPose.firstOrNull { it is ImuDeadReckoningPoseSource } as? ImuDeadReckoningPoseSource)?.onSample(s) } }
         startRobotStatusLoop()
+        scope.launch { runCatching { g.updater.check() } }
         Log.i(TAG, "controller started, device $deviceId")
     }
 

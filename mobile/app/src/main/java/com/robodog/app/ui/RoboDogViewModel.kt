@@ -42,4 +42,6 @@ class RoboDogViewModel(val g: AppGraph) : ViewModel() {
     fun deleteVideo(v: VideoRecording) = viewModelScope.launch { c.deleteVideo(v) }
     fun deleteMap(m: ThermalMap) = viewModelScope.launch { c.deleteMap(m) }
     suspend fun missionWithStats(id: String): Mission? = g.missions.withStats(id)
+    fun checkForUpdate() = viewModelScope.launch { g.updater.check() }
+    fun installUpdate() = viewModelScope.launch { g.updater.downloadAndInstall() }
 }

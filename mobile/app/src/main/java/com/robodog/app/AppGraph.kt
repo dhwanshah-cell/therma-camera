@@ -18,6 +18,7 @@ import com.robodog.app.rgb.CalibrationStore
 import com.robodog.app.rgb.RgbCameraController
 import com.robodog.app.robot.RobotStatusProvider
 import com.robodog.app.storage.MediaStorage
+import com.robodog.app.sync.AppUpdater
 import com.robodog.app.sync.BackendClient
 import com.robodog.app.sync.LiveStreamer
 import com.robodog.app.sync.SyncQueue
@@ -66,6 +67,7 @@ class AppGraph(val context: Context) {
     val syncQueue = SyncQueue(db)
     val syncRunner = SyncRunner(db, syncQueue, backend)
     val liveStreamer = LiveStreamer { controller.deviceId }
+    val updater = AppUpdater(context)
 
     val controller = RoboDogController(this)
 }
