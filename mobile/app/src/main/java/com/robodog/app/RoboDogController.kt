@@ -144,8 +144,9 @@ class RoboDogController(private val g: AppGraph) {
         when (st) {
             is UsbDeviceMonitor.State.Detected -> {
                 if (!st.hasPermission) {
-                    if (settings?.autoStartCamera != false) g.usbMonitor.requestPermission(st.device)
-                } else if (!g.uvcCamera.isStreaming && settings?.autoStartCamera != false) {
+                    // Ask once; after a denial wait for the user to tap RECONNECT (or replug the camera).
+                    if (settings?.autoStartCamera != false && !g.usbMonitor.wasDenied(st.device)) g.usbMonitor.requestPermission(st.device)
+                } else if (!g.uvcCamera.isStreaming && g.uvcCamera.state.value !is UvcCamera.State.Opening && settings?.autoStartCamera != false) {
                     startCamera(st.device)
                 }
             }
@@ -165,12 +166,16 @@ class RoboDogController(private val g: AppGraph) {
         scope.launch(Dispatchers.IO) { g.uvcCamera.start(device) }
     }
 
-    fun requestCameraPermission() { (g.usbMonitor.state.value as? UsbDeviceMonitor.State.Detected)?.let { g.usbMonitor.requestPermission(it.device) } }
+    fun requestCameraPermission() { (g.usbMonitor.state.value as? UsbDeviceMonitor.State.Detected)?.let { g.usbMonitor.requestPermission(it.device, force = true) } }
 
     fun restartCamera() {
         g.uvcCamera.stop()
         g.usbMonitor.refresh()
-        (g.usbMonitor.state.value as? UsbDeviceMonitor.State.Detected)?.let { if (it.hasPermission) startCamera(it.device) else g.usbMonitor.requestPermission(it.device) }
+        when (val st = g.usbMonitor.state.value) {
+            is UsbDeviceMonitor.State.Detected -> if (st.hasPermission) startCamera(st.device) else g.usbMonitor.requestPermission(st.device, force = true)
+            is UsbDeviceMonitor.State.PermissionDenied -> g.usbMonitor.requestPermission(st.device, force = true)
+            UsbDeviceMonitor.State.NoDevice -> _toast.value = "No USB camera detected. Check the OTG cable."
+        }
     }
 
     private fun onCameraState(st: UvcCamera.State) {

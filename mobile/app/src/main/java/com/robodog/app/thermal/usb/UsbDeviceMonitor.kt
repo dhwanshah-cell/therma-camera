@@ -38,6 +38,11 @@ class UsbDeviceMonitor(private val context: Context) {
     val attached: StateFlow<List<Pair<UsbDevice, UsbDeviceMatcher.Match>>> = _attached.asStateFlow()
 
     private var registered = false
+    // One permission request per device at a time: a second request cancels the first and Android
+    // then reports "denied" without showing a dialog.
+    @Volatile private var pendingRequestDevice: String? = null
+    @Volatile private var pendingRequestAt = 0L
+    private val deniedDevices = HashSet<String>()
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
@@ -49,7 +54,11 @@ class UsbDeviceMonitor(private val context: Context) {
                 ACTION_USB_PERMISSION -> {
                     val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
                     Log.i(TAG, "permission ${if (granted) "granted" else "denied"} for ${device?.deviceName}")
-                    if (device != null && !granted) _state.value = State.PermissionDenied(device) else refresh()
+                    pendingRequestDevice = null
+                    if (device != null && !granted && !usbManager.hasPermission(device)) {
+                        synchronized(deniedDevices) { deniedDevices += device.deviceName }
+                        _state.value = State.PermissionDenied(device)
+                    } else refresh()
                 }
             }
         }
@@ -85,12 +94,29 @@ class UsbDeviceMonitor(private val context: Context) {
 
     fun hasPermission(device: UsbDevice): Boolean = usbManager.hasPermission(device)
 
-    fun requestPermission(device: UsbDevice) {
+    fun wasDenied(device: UsbDevice): Boolean = synchronized(deniedDevices) { device.deviceName in deniedDevices }
+
+    /**
+     * Shows the system USB permission dialog. Returns false when a request for this device is
+     * already pending (within 20 s) so the dialog is not cancelled by a duplicate request.
+     * [force] is used by the RECONNECT button and also clears an earlier denial.
+     */
+    fun requestPermission(device: UsbDevice, force: Boolean = false): Boolean {
+        if (usbManager.hasPermission(device)) { refresh(); return true }
+        val now = System.currentTimeMillis()
+        if (!force && pendingRequestDevice == device.deviceName && now - pendingRequestAt < 20_000) {
+            Log.i(TAG, "permission request already pending for ${device.deviceName}")
+            return false
+        }
+        if (force) synchronized(deniedDevices) { deniedDevices -= device.deviceName }
+        pendingRequestDevice = device.deviceName
+        pendingRequestAt = now
         val flags = if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
         val intent = Intent(ACTION_USB_PERMISSION).apply { setPackage(context.packageName) }
         val pi = PendingIntent.getBroadcast(context, 0, intent, flags)
         Log.i(TAG, "requesting permission for ${device.deviceName}")
         usbManager.requestPermission(device, pi)
+        return true
     }
 
     fun openDevice(device: UsbDevice) = usbManager.openDevice(device)

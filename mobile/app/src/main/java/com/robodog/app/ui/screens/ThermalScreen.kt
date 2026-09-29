@@ -120,7 +120,7 @@ fun ThermalScreen(vm: RoboDogViewModel, onMap: () -> Unit, onStorage: () -> Unit
                 is UvcCamera.State.Opening -> Text("Opening device and negotiating UVC stream…", color = RdColors.Amber)
                 UvcCamera.State.Idle -> when (val u = usb) {
                     is UsbDeviceMonitor.State.Detected -> Text("${vm.g.usbMonitor.describe(u.device)} — ${if (u.hasPermission) "permission granted" else "waiting for USB permission"}", color = RdColors.Muted, style = MaterialTheme.typography.bodySmall)
-                    is UsbDeviceMonitor.State.PermissionDenied -> Text("USB permission was denied. Tap RECONNECT and accept the dialog.", color = RdColors.Red)
+                    is UsbDeviceMonitor.State.PermissionDenied -> Text("USB permission not granted. Tap RECONNECT and choose Allow in the dialog, or unplug and replug the camera and choose \"always open RoboDog\".", color = RdColors.Red)
                     UsbDeviceMonitor.State.NoDevice -> Text("No USB video device attached. Plug the TC01A into the USB-C port (OTG).", color = RdColors.Muted)
                 }
             }
