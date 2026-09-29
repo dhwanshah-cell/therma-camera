@@ -15,8 +15,10 @@
 #include <cstring>
 #include <cstdlib>
 #include <cerrno>
+#include <atomic>
 #include <deque>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -82,7 +84,25 @@ void releaseHandle(jlong id) {
 struct UvcContext {
     libusb_context* usb = nullptr;
     uvc_context_t* uvc = nullptr;
+    // libuvc only runs libusb's event loop when it owns the libusb context. We provide our own
+    // context (so device discovery stays off and logging is ours), therefore we must pump
+    // events ourselves or no transfer ever completes: exactly the "stream started, 0 frames,
+    // cancellations never finish" symptom seen on the phone.
+    std::thread eventThread;
+    // Plain int: libusb_handle_events_timeout_completed takes int*; written before an interrupt.
+    volatile int stopEvents = 0;
 };
+
+void eventLoop(UvcContext* ctx) {
+    while (!ctx->stopEvents) {
+        struct timeval tv = {0, 100000};  // 100 ms so the loop notices stopEvents promptly
+        int r = libusb_handle_events_timeout_completed(ctx->usb, &tv, const_cast<int*>(&ctx->stopEvents));
+        if (r != LIBUSB_SUCCESS && r != LIBUSB_ERROR_TIMEOUT && r != LIBUSB_ERROR_INTERRUPTED) {
+            pushLog(std::string("libusb_handle_events: ") + libusb_strerror(r));
+            if (r == LIBUSB_ERROR_NO_DEVICE) break;
+        }
+    }
+}
 
 struct UvcDevice {
     UvcContext* ctx = nullptr;
@@ -204,7 +224,8 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeInit(JNIEnv*, jobject) {
         delete ctx;
         return static_cast<jlong>(r);
     }
-    libusb_set_option(ctx->usb, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_INFO);
+    // Keep warnings/errors only from here on (debug would log every transfer while streaming).
+    libusb_set_option(ctx->usb, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_WARNING);
     uvc_error_t ur = uvc_init(&ctx->uvc, ctx->usb);
     if (ur != UVC_SUCCESS) {
         LOGE("uvc_init failed: %s", uvc_strerror(ur));
@@ -212,6 +233,9 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeInit(JNIEnv*, jobject) {
         delete ctx;
         return static_cast<jlong>(ur);
     }
+    ctx->stopEvents = 0;
+    ctx->eventThread = std::thread(eventLoop, ctx);
+    pushLog("libusb event thread started");
     LOGI("libusb %d.%d.%d / libuvc initialised", libusb_get_version()->major,
          libusb_get_version()->minor, libusb_get_version()->micro);
     return registerHandle(ctx);
@@ -223,6 +247,9 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeExit(JNIEnv*, jobject, jlong ha
     if (!ctx) return;
     releaseHandle(handle);
     if (ctx->uvc) uvc_exit(ctx->uvc);
+    ctx->stopEvents = 1;
+    if (ctx->usb) libusb_interrupt_event_handler(ctx->usb);
+    if (ctx->eventThread.joinable()) ctx->eventThread.join();
     // uvc_exit does not free a caller-provided libusb context.
     if (ctx->usb) libusb_exit(ctx->usb);
     delete ctx;
