@@ -36,6 +36,14 @@ ESP32 (Wi-Fi AP) ─HTTP───┘                 └──► live WebSocket
 * 3D thermal mapping is only rendered when a depth/pose source supplies real geometry; otherwise the
   viewers say "3D reconstruction requires a depth/pose source." / "Waiting for depth/pose data."
 
+## Fastest way to run it
+
+* **Phone app**: open https://github.com/dhwanshah-cell/therma-camera/releases/tag/latest-apk on the phone,
+  download `robodog.apk`, tap it, allow the install. GitHub rebuilds it on every push.
+* **Laptop dashboard (Windows)**: double-click `start-robodog.cmd` (or `start-robodog-simulation.cmd` for
+  labelled fake data). Needs Node.js installed once. macOS/Linux: `./start-robodog.sh`.
+* **Install over USB instead**: `install-app.cmd` downloads adb and the APK and installs it (USB debugging on).
+
 ## Quick start (development)
 
 Requirements: Node.js ≥ 20, Android Studio (Ladybug or newer) with NDK 27 and CMake 3.22 for the app.
