@@ -17,6 +17,7 @@
 #include <cerrno>
 #include <deque>
 #include <mutex>
+#include <unordered_map>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,27 @@ std::string drainLog() {
     return out;
 }
 bool g_logInstalled = false;
+
+// Handle registry. Android (arm64, Android 11+) tags heap pointers in the top byte, which makes a
+// pointer cast to jlong negative; the Java side therefore never sees pointers, only ids >= 1.
+std::mutex g_handleMutex;
+std::unordered_map<jlong, void*> g_handles;
+jlong g_nextHandle = 1;
+jlong registerHandle(void* p) {
+    std::lock_guard<std::mutex> lock(g_handleMutex);
+    jlong id = g_nextHandle++;
+    g_handles[id] = p;
+    return id;
+}
+template <typename T> T* lookupHandle(jlong id) {
+    std::lock_guard<std::mutex> lock(g_handleMutex);
+    auto it = g_handles.find(id);
+    return it == g_handles.end() ? nullptr : static_cast<T*>(it->second);
+}
+void releaseHandle(jlong id) {
+    std::lock_guard<std::mutex> lock(g_handleMutex);
+    g_handles.erase(id);
+}
 
 struct UvcContext {
     libusb_context* usb = nullptr;
@@ -192,13 +214,14 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeInit(JNIEnv*, jobject) {
     }
     LOGI("libusb %d.%d.%d / libuvc initialised", libusb_get_version()->major,
          libusb_get_version()->minor, libusb_get_version()->micro);
-    return reinterpret_cast<jlong>(ctx);
+    return registerHandle(ctx);
 }
 
 JNIEXPORT void JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeExit(JNIEnv*, jobject, jlong handle) {
-    auto* ctx = reinterpret_cast<UvcContext*>(handle);
+    auto* ctx = lookupHandle<UvcContext>(handle);
     if (!ctx) return;
+    releaseHandle(handle);
     if (ctx->uvc) uvc_exit(ctx->uvc);
     // uvc_exit does not free a caller-provided libusb context.
     if (ctx->usb) libusb_exit(ctx->usb);
@@ -209,7 +232,7 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeExit(JNIEnv*, jobject, jlong ha
 
 JNIEXPORT jlong JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeOpen(JNIEnv*, jobject, jlong ctxHandle, jint fd) {
-    auto* ctx = reinterpret_cast<UvcContext*>(ctxHandle);
+    auto* ctx = lookupHandle<UvcContext>(ctxHandle);
     if (!ctx || fd < 0) return static_cast<jlong>(UVC_ERROR_INVALID_PARAM);
     auto* dev = new UvcDevice();
     dev->ctx = ctx;
@@ -223,13 +246,15 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeOpen(JNIEnv*, jobject, jlong ct
         return static_cast<jlong>(r);
     }
     LOGI("uvc device opened on fd %d, control interface %d", fd, dev->devh->info->ctrl_if.bInterfaceNumber);
-    return reinterpret_cast<jlong>(dev);
+    pushLog("uvc device opened, control interface " + std::to_string(dev->devh->info->ctrl_if.bInterfaceNumber));
+    return registerHandle(dev);
 }
 
 JNIEXPORT void JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeClose(JNIEnv*, jobject, jlong devHandle) {
-    auto* dev = reinterpret_cast<UvcDevice*>(devHandle);
+    auto* dev = lookupHandle<UvcDevice>(devHandle);
     if (!dev) return;
+    releaseHandle(devHandle);
     if (dev->devh) uvc_close(dev->devh);
     delete dev;
 }
@@ -237,7 +262,7 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeClose(JNIEnv*, jobject, jlong d
 /** JSON description of the device's UVC control interface and every streaming format/frame. */
 JNIEXPORT jstring JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeDescribe(JNIEnv* env, jobject, jlong devHandle) {
-    auto* dev = reinterpret_cast<UvcDevice*>(devHandle);
+    auto* dev = lookupHandle<UvcDevice>(devHandle);
     if (!dev || !dev->devh) return toJString(env, "{\"error\":\"no device\"}");
     uvc_device_handle_t* devh = dev->devh;
     std::string j = "{";
@@ -331,7 +356,7 @@ JNIEXPORT jlong JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStartStream(JNIEnv*, jobject, jlong devHandle,
                                                             jint formatIndex, jint frameIndex,
                                                             jint intervalUnits) {
-    auto* dev = reinterpret_cast<UvcDevice*>(devHandle);
+    auto* dev = lookupHandle<UvcDevice>(devHandle);
     if (!dev || !dev->devh) return static_cast<jlong>(UVC_ERROR_INVALID_PARAM);
     uvc_device_handle_t* devh = dev->devh;
 
@@ -373,8 +398,10 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStartStream(JNIEnv*, jobject, j
 
     LOGI("probing format %d frame %d (%ux%u) interval %u on interface %u", formatIndex, frameIndex,
          frameDesc->wWidth, frameDesc->wHeight, stream->ctrl.dwFrameInterval, owner->bInterfaceNumber);
+    pushLog("probing format " + std::to_string(formatIndex) + " frame " + std::to_string(frameIndex) + " (" + std::to_string(frameDesc->wWidth) + "x" + std::to_string(frameDesc->wHeight) + ") interval " + std::to_string(stream->ctrl.dwFrameInterval));
     uvc_error_t r = uvc_probe_stream_ctrl(devh, &stream->ctrl);
     if (r != UVC_SUCCESS) {
+        pushLog(std::string("uvc_probe_stream_ctrl failed: ") + uvc_strerror(r) + " (" + std::to_string(r) + ")");
         LOGE("uvc_probe_stream_ctrl failed: %s (%d)", uvc_strerror(r), r);
         delete stream;
         return static_cast<jlong>(r);
@@ -384,6 +411,7 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStartStream(JNIEnv*, jobject, j
 
     r = uvc_stream_open_ctrl(devh, &stream->strmh, &stream->ctrl);
     if (r != UVC_SUCCESS) {
+        pushLog(std::string("uvc_stream_open_ctrl failed: ") + uvc_strerror(r) + " (" + std::to_string(r) + ")");
         LOGE("uvc_stream_open_ctrl failed: %s (%d)", uvc_strerror(r), r);
         delete stream;
         return static_cast<jlong>(r);
@@ -392,6 +420,7 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStartStream(JNIEnv*, jobject, j
     // Polling mode: no callback, frames are fetched with uvc_stream_get_frame.
     r = uvc_stream_start(stream->strmh, nullptr, nullptr, 0);
     if (r != UVC_SUCCESS) {
+        pushLog(std::string("uvc_stream_start failed: ") + uvc_strerror(r) + " (" + std::to_string(r) + ")");
         LOGE("uvc_stream_start failed: %s (%d)", uvc_strerror(r), r);
         uvc_stream_close(stream->strmh);
         delete stream;
@@ -400,13 +429,14 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStartStream(JNIEnv*, jobject, j
     const struct libusb_interface* iface = &devh->info->config->interface[owner->bInterfaceNumber];
     stream->isochronous = iface->num_altsetting > 1;
     LOGI("stream started (%s transfers)", stream->isochronous ? "isochronous" : "bulk");
-    return reinterpret_cast<jlong>(stream);
+    pushLog(std::string("stream started, ") + (stream->isochronous ? "isochronous" : "bulk") + " transfers, maxVideoFrameSize=" + std::to_string(stream->ctrl.dwMaxVideoFrameSize) + " maxPayload=" + std::to_string(stream->ctrl.dwMaxPayloadTransferSize));
+    return registerHandle(stream);
 }
 
 /** JSON with the negotiated stream parameters. */
 JNIEXPORT jstring JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStreamInfo(JNIEnv* env, jobject, jlong streamHandle) {
-    auto* s = reinterpret_cast<UvcStream*>(streamHandle);
+    auto* s = lookupHandle<UvcStream>(streamHandle);
     if (!s) return toJString(env, "{}");
     char buf[512];
     snprintf(buf, sizeof(buf),
@@ -426,7 +456,7 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStreamInfo(JNIEnv* env, jobject
 JNIEXPORT jint JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeGetFrame(JNIEnv* env, jobject, jlong streamHandle,
                                                          jobject out, jintArray info, jint timeoutUs) {
-    auto* s = reinterpret_cast<UvcStream*>(streamHandle);
+    auto* s = lookupHandle<UvcStream>(streamHandle);
     if (!s || !s->strmh) return UVC_ERROR_INVALID_PARAM;
     std::lock_guard<std::mutex> lock(s->mutex);
     if (!s->strmh) return UVC_ERROR_INVALID_PARAM;
@@ -452,8 +482,9 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeGetFrame(JNIEnv* env, jobject, 
 
 JNIEXPORT void JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStopStream(JNIEnv*, jobject, jlong streamHandle) {
-    auto* s = reinterpret_cast<UvcStream*>(streamHandle);
+    auto* s = lookupHandle<UvcStream>(streamHandle);
     if (!s) return;
+    releaseHandle(streamHandle);
     {
         std::lock_guard<std::mutex> lock(s->mutex);
         if (s->strmh) {
