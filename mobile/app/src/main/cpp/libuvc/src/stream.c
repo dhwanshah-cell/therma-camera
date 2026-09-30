@@ -40,6 +40,11 @@
 #include "libuvc/libuvc_internal.h"
 #include "errno.h"
 
+/* RoboDog/Android: runtime-tunable isochronous queue depth. Android USB stacks reject large
+ * batches of big iso URBs with ENOMEM; smaller/fewer transfers are accepted. */
+int uvc_num_transfer_bufs = LIBUVC_NUM_TRANSFER_BUFS;
+int uvc_max_packets_per_transfer = 32;
+
 #ifdef _MSC_VER
 
 #define DELTA_EPOCH_IN_MICROSECS  116444736000000000Ui64
@@ -1115,6 +1120,9 @@ uvc_error_t uvc_stream_start(
   uvc_error_t ret;
   /* Total amount of data per transfer */
   size_t total_transfer_size = 0;
+  int num_bufs = uvc_num_transfer_bufs;
+  if (num_bufs < 1) num_bufs = 1;
+  if (num_bufs > LIBUVC_NUM_TRANSFER_BUFS) num_bufs = LIBUVC_NUM_TRANSFER_BUFS;
   struct libusb_transfer *transfer;
   int transfer_id;
 
@@ -1210,8 +1218,10 @@ uvc_error_t uvc_stream_start(
                                 endpoint_bytes_per_packet - 1) / endpoint_bytes_per_packet;
 
         /* But keep a reasonable limit: Otherwise we start dropping data */
-        if (packets_per_transfer > 32)
-          packets_per_transfer = 32;
+        if (packets_per_transfer > (size_t)uvc_max_packets_per_transfer)
+          packets_per_transfer = uvc_max_packets_per_transfer;
+        if (packets_per_transfer < 1)
+          packets_per_transfer = 1;
         
         total_transfer_size = packets_per_transfer * endpoint_bytes_per_packet;
         break;
@@ -1234,7 +1244,7 @@ uvc_error_t uvc_stream_start(
     }
 
   /* Set up the transfers */
-  for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS; ++transfer_id) {
+  for (transfer_id = 0; transfer_id < num_bufs; ++transfer_id) {
       transfer = libusb_alloc_transfer(packets_per_transfer);
       strmh->transfers[transfer_id] = transfer;      
       strmh->transfer_bufs[transfer_id] = malloc(total_transfer_size);
@@ -1247,7 +1257,7 @@ uvc_error_t uvc_stream_start(
       libusb_set_iso_packet_lengths(transfer, endpoint_bytes_per_packet);
     }
   } else {
-    for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS;
+    for (transfer_id = 0; transfer_id < num_bufs;
         ++transfer_id) {
       transfer = libusb_alloc_transfer(0);
       strmh->transfers[transfer_id] = transfer;
@@ -1271,7 +1281,7 @@ uvc_error_t uvc_stream_start(
     pthread_create(&strmh->cb_thread, NULL, _uvc_user_caller, (void*) strmh);
   }
 
-  for (transfer_id = 0; transfer_id < LIBUVC_NUM_TRANSFER_BUFS;
+  for (transfer_id = 0; transfer_id < num_bufs;
       transfer_id++) {
     ret = libusb_submit_transfer(strmh->transfers[transfer_id]);
     if (ret != UVC_SUCCESS) {
@@ -1281,7 +1291,7 @@ uvc_error_t uvc_stream_start(
   }
 
   if ( ret != UVC_SUCCESS && transfer_id >= 0 ) {
-    for ( ; transfer_id < LIBUVC_NUM_TRANSFER_BUFS; transfer_id++) {
+    for ( ; transfer_id < num_bufs; transfer_id++) {
       free ( strmh->transfers[transfer_id]->buffer );
       libusb_free_transfer ( strmh->transfers[transfer_id]);
       strmh->transfers[transfer_id] = 0;

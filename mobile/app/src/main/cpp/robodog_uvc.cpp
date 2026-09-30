@@ -382,7 +382,10 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeDescribe(JNIEnv* env, jobject, 
 JNIEXPORT jlong JNICALL
 Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStartStream(JNIEnv*, jobject, jlong devHandle,
                                                             jint formatIndex, jint frameIndex,
-                                                            jint intervalUnits) {
+                                                            jint intervalUnits, jint numTransfers,
+                                                            jint packetsPerTransfer) {
+    uvc_num_transfer_bufs = numTransfers > 0 ? numTransfers : 100;
+    uvc_max_packets_per_transfer = packetsPerTransfer > 0 ? packetsPerTransfer : 32;
     auto* dev = lookupHandle<UvcDevice>(devHandle);
     if (!dev || !dev->devh) return static_cast<jlong>(UVC_ERROR_INVALID_PARAM);
     uvc_device_handle_t* devh = dev->devh;
@@ -455,6 +458,17 @@ Java_com_robodog_app_thermal_uvc_NativeUvc_nativeStartStream(JNIEnv*, jobject, j
     }
     const struct libusb_interface* iface = &devh->info->config->interface[owner->bInterfaceNumber];
     stream->isochronous = iface->num_altsetting > 1;
+    int inFlight = 0;
+    for (int i = 0; i < LIBUVC_NUM_TRANSFER_BUFS; i++) if (stream->strmh->transfers[i]) inFlight++;
+    pushLog("transfers in flight: " + std::to_string(inFlight) + "/" + std::to_string(uvc_num_transfer_bufs) +
+            " (max " + std::to_string(uvc_max_packets_per_transfer) + " packets each)");
+    if (inFlight == 0) {
+        pushLog("no transfer could be submitted with this queue size");
+        uvc_stream_stop(stream->strmh);
+        uvc_stream_close(stream->strmh);
+        delete stream;
+        return static_cast<jlong>(UVC_ERROR_NO_MEM);
+    }
     LOGI("stream started (%s transfers)", stream->isochronous ? "isochronous" : "bulk");
     pushLog(std::string("stream started, ") + (stream->isochronous ? "isochronous" : "bulk") + " transfers, maxVideoFrameSize=" + std::to_string(stream->ctrl.dwMaxVideoFrameSize) + " maxPayload=" + std::to_string(stream->ctrl.dwMaxPayloadTransferSize));
     return registerHandle(stream);

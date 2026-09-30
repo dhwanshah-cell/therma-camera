@@ -192,7 +192,12 @@ class UvcCamera(
         return listOf(primary) + others.take(MAX_FALLBACK_MODES)
     }
 
-    private fun streamLoop(candidates: List<UvcStreamMode>) {
+    /** Isochronous queue shapes to try, smallest first: Android USB stacks reject large queues. */
+    data class TransferConfig(val transfers: Int, val packets: Int)
+    private val transferConfigs = listOf(TransferConfig(8, 8), TransferConfig(4, 4), TransferConfig(16, 16), TransferConfig(100, 32))
+
+    private fun streamLoop(modes: List<UvcStreamMode>) {
+        val candidates = modes.flatMap { m -> transferConfigs.map { m to it } }
         var modeIndex = 0
         var buffer: ByteBuffer? = null
         val info = IntArray(6)
@@ -204,9 +209,9 @@ class UvcCamera(
         var scratch = ByteArray(0)
 
         while (running.get() && modeIndex < candidates.size) {
-            val mode = candidates[modeIndex]
-            log("Trying mode ${modeIndex + 1}/${candidates.size}: $mode (${mode.reason})")
-            val handle = NativeUvc.nativeStartStream(devHandle, mode.format.formatIndex, mode.frame.frameIndex, mode.frameInterval.toInt())
+            val (mode, tc) = candidates[modeIndex]
+            log("Trying mode ${modeIndex + 1}/${candidates.size}: $mode (${mode.reason}), queue ${tc.transfers}x${tc.packets} packets")
+            val handle = NativeUvc.nativeStartStream(devHandle, mode.format.formatIndex, mode.frame.frameIndex, mode.frameInterval.toInt(), tc.transfers, tc.packets)
             drainNativeLog()
             if (handle <= 0) {
                 log("Negotiation failed: ${NativeUvc.nativeStrError(handle.toInt())}")
@@ -277,8 +282,8 @@ class UvcCamera(
             modeIndex++
         }
         if (running.get() && modeIndex >= candidates.size) {
-            fail("Camera negotiated but never delivered a frame in ${candidates.size} mode(s)",
-                "This is the same symptom as generic USB camera apps stuck on 'Connecting'. See the descriptor dump.")
+            fail("Camera negotiated but never delivered a frame in ${candidates.size} attempt(s)",
+                "Tried ${modes.size} mode(s) with ${transferConfigs.size} USB queue sizes each. See the connection log for the transfer errors.")
             running.set(false)
         }
         releaseNative()

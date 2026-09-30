@@ -535,6 +535,10 @@ typedef struct uvc_still_ctrl {
   uint8_t bInterfaceNumber;
 } uvc_still_ctrl_t;
 
+/* RoboDog: tunable isochronous queue (see stream.c). */
+extern int uvc_num_transfer_bufs;
+extern int uvc_max_packets_per_transfer;
+
 uvc_error_t uvc_init(uvc_context_t **ctx, struct libusb_context *usb_ctx);
 void uvc_exit(uvc_context_t *ctx);
 

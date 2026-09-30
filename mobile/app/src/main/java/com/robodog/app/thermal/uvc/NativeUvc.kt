@@ -38,7 +38,8 @@ object NativeUvc {
     external fun nativeDescribe(devHandle: Long): String
 
     /** Negotiates and starts streaming. Returns stream handle (>0) or negative error. */
-    external fun nativeStartStream(devHandle: Long, formatIndex: Int, frameIndex: Int, intervalUnits: Int): Long
+    /** [numTransfers]/[packetsPerTransfer] size the isochronous queue; Android rejects big queues with ENOMEM. */
+    external fun nativeStartStream(devHandle: Long, formatIndex: Int, frameIndex: Int, intervalUnits: Int, numTransfers: Int, packetsPerTransfer: Int): Long
     external fun nativeStreamInfo(streamHandle: Long): String
 
     /**
