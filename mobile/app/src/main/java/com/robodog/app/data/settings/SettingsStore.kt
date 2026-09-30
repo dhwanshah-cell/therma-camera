@@ -30,6 +30,7 @@ data class Settings(
     val palette: String,
     val radiometricDecoderId: String,
     val stackedLayoutMode: String,
+    val stackedDecode: String,
     val forcedFormatIndex: Int,
     val forcedFrameIndex: Int,
     val intensityHotspotThreshold: Float,
@@ -54,6 +55,7 @@ class SettingsStore(private val context: Context) {
         val palette = stringPreferencesKey("palette")
         val radiometric = stringPreferencesKey("radiometric_decoder")
         val stacked = stringPreferencesKey("stacked_layout")
+        val stackedDecode = stringPreferencesKey("stacked_decode")
         val forcedFormat = intPreferencesKey("forced_format")
         val forcedFrame = intPreferencesKey("forced_frame")
         val intensityThreshold = floatPreferencesKey("intensity_hotspot_threshold")
@@ -78,6 +80,7 @@ class SettingsStore(private val context: Context) {
             palette = p[K.palette] ?: "IRON",
             radiometricDecoderId = p[K.radiometric] ?: "NONE",
             stackedLayoutMode = p[K.stacked] ?: "AUTO",
+            stackedDecode = p[K.stackedDecode] ?: "AUTO",
             forcedFormatIndex = p[K.forcedFormat] ?: 0,
             forcedFrameIndex = p[K.forcedFrame] ?: 0,
             intensityHotspotThreshold = p[K.intensityThreshold] ?: RoboDogConstants.DEFAULT_INTENSITY_HOTSPOT_THRESHOLD,
@@ -115,6 +118,7 @@ class SettingsStore(private val context: Context) {
             p[K.palette] = next.palette
             p[K.radiometric] = next.radiometricDecoderId
             p[K.stacked] = next.stackedLayoutMode
+            p[K.stackedDecode] = next.stackedDecode
             p[K.forcedFormat] = next.forcedFormatIndex
             p[K.forcedFrame] = next.forcedFrameIndex
             p[K.intensityThreshold] = next.intensityHotspotThreshold

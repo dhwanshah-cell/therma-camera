@@ -27,11 +27,13 @@ class ThermalFrame(
     val intensityMax: Int,
     val cameraColor: IntArray?,
     val hasChroma: Boolean,
-    /** Bottom half of a stacked frame (raw bytes), kept verbatim for the radiometric decoders. */
+    /** The 16-bit "raw data" half of a stacked frame (verbatim bytes) for the radiometric decoders. */
     val rawLowerHalf: ByteArray?,
     val radiometric: RadiometricResult?,
     val source: DataSource,
     val layout: FrameLayout,
+    /** Human-readable description of how the bytes were interpreted (e.g. "RAW16 bottom half"). */
+    val decodeInfo: String = "",
 ) {
     val pixelCount: Int get() = width * height
     val centerIntensity: Int get() = intensity[(height / 2) * width + width / 2]

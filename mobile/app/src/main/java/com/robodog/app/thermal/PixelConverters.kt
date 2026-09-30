@@ -7,10 +7,10 @@ package com.robodog.app.thermal
 object PixelConverters {
 
     /** Extracts luma from packed YUY2 (Y0 U Y1 V) into [outY] (0..255). Returns min..max. */
-    fun yuy2Luma(src: ByteArray, width: Int, height: Int, outY: IntArray, yFirst: Boolean = true): IntRange {
+    fun yuy2Luma(src: ByteArray, width: Int, height: Int, outY: IntArray, yFirst: Boolean = true, srcOffset: Int = 0): IntRange {
         var mn = 255; var mx = 0
         val n = width * height
-        val yOff = if (yFirst) 0 else 1
+        val yOff = (if (yFirst) 0 else 1) + srcOffset
         var i = 0
         while (i < n) {
             val v = src[i * 2 + yOff].toInt() and 0xFF
@@ -23,12 +23,12 @@ object PixelConverters {
     }
 
     /** Full YUY2 → ARGB conversion (BT.601 limited range). Returns whether chroma deviates from grey. */
-    fun yuy2ToArgb(src: ByteArray, width: Int, height: Int, out: IntArray, yFirst: Boolean = true): Boolean {
+    fun yuy2ToArgb(src: ByteArray, width: Int, height: Int, out: IntArray, yFirst: Boolean = true, srcOffset: Int = 0): Boolean {
         val n = width * height
         var chromaDeviation = 0L
         var i = 0
         while (i + 1 < n) {
-            val b = i * 2
+            val b = i * 2 + srcOffset
             val y0: Int; val u: Int; val y1: Int; val v: Int
             if (yFirst) { y0 = src[b].toInt() and 0xFF; u = src[b + 1].toInt() and 0xFF; y1 = src[b + 2].toInt() and 0xFF; v = src[b + 3].toInt() and 0xFF }
             else { u = src[b].toInt() and 0xFF; y0 = src[b + 1].toInt() and 0xFF; v = src[b + 2].toInt() and 0xFF; y1 = src[b + 3].toInt() and 0xFF }
@@ -52,11 +52,11 @@ object PixelConverters {
     }
 
     /** 16-bit little-endian grey → [out]. Returns min..max. */
-    fun gray16(src: ByteArray, count: Int, out: IntArray, littleEndian: Boolean = true): IntRange {
+    fun gray16(src: ByteArray, count: Int, out: IntArray, littleEndian: Boolean = true, srcOffset: Int = 0): IntRange {
         var mn = 65535; var mx = 0
         for (i in 0 until count) {
-            val lo = src[i * 2].toInt() and 0xFF
-            val hi = src[i * 2 + 1].toInt() and 0xFF
+            val lo = src[i * 2 + srcOffset].toInt() and 0xFF
+            val hi = src[i * 2 + 1 + srcOffset].toInt() and 0xFF
             val v = if (littleEndian) lo or (hi shl 8) else hi or (lo shl 8)
             out[i] = v
             if (v < mn) mn = v
@@ -135,6 +135,29 @@ object PixelConverters {
             if (y > mx) mx = y
         }
         return mn..mx
+    }
+
+    /**
+     * Roughness of an interpretation: mean absolute difference between horizontally adjacent
+     * samples divided by the value range. Real images are smooth (small); misread byte layouts
+     * look like noise (large). Samples every [rowStep]-th row.
+     */
+    fun roughness(sample: (index: Int) -> Int, width: Int, height: Int, rowStep: Int = 4): Double {
+        var diff = 0L; var count = 0L; var mn = Int.MAX_VALUE; var mx = Int.MIN_VALUE
+        var y = 0
+        while (y < height) {
+            var prev = sample(y * width)
+            if (prev < mn) mn = prev; if (prev > mx) mx = prev
+            for (x in 1 until width) {
+                val v = sample(y * width + x)
+                diff += kotlin.math.abs(v - prev); count++
+                if (v < mn) mn = v; if (v > mx) mx = v
+                prev = v
+            }
+            y += rowStep
+        }
+        if (count == 0L) return 1.0
+        return diff.toDouble() / count / (mx - mn + 1).toDouble()
     }
 
     private fun clamp(v: Int) = if (v < 0) 0 else if (v > 255) 255 else v

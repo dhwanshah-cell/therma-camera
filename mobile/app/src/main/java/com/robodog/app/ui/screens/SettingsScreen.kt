@@ -76,6 +76,14 @@ fun SettingsScreen(vm: RoboDogViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("AUTO", "NEVER", "ALWAYS").forEach { m -> ActionButton(m, accent = settings.stackedLayoutMode == m) { vm.updateSettings { copy(stackedLayoutMode = m) } } }
             }
+            Label("Stacked frame decoding (256x384: which half is the picture)")
+            com.robodog.app.thermal.ThermalFrameProcessor.StackedDecode.entries.forEach { d ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ActionButton(if (settings.stackedDecode == d.name) "●" else "○", accent = settings.stackedDecode == d.name) { vm.updateSettings { copy(stackedDecode = d.name) } }
+                    Text(d.label, Modifier.padding(start = 8.dp), color = RdColors.Text)
+                }
+            }
+            vm.g.frameProcessor.autoDecodeChoice?.let { Text("Auto picked: ${it.label}  (${vm.g.frameProcessor.autoDecodeScores})", color = RdColors.Muted, style = MaterialTheme.typography.bodySmall) }
             TextRow("Force UVC format index (0 = auto)", settings.forcedFormatIndex.toString()) { v -> v.toIntOrNull()?.let { n -> vm.updateSettings { copy(forcedFormatIndex = n) } } }
             TextRow("Force UVC frame index (0 = auto)", settings.forcedFrameIndex.toString()) { v -> v.toIntOrNull()?.let { n -> vm.updateSettings { copy(forcedFrameIndex = n) } } }
             KeyValue("Native driver", if (NativeUvc.ensureLoaded()) NativeUvc.nativeVersion() else "failed: ${NativeUvc.loadError}")

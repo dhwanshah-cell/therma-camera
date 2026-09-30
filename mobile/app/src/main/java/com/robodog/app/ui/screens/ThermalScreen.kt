@@ -97,7 +97,7 @@ fun ThermalScreen(vm: RoboDogViewModel, onMap: () -> Unit, onStorage: () -> Unit
                 frame?.let { f ->
                     Spacer(Modifier.height(6.dp))
                     KeyValue("Intensity (raw ${f.intensityBits}-bit)", "center ${f.centerIntensity} · min ${f.intensityMin} · max ${f.intensityMax}")
-                    if (f.layout == FrameLayout.STACKED_IMAGE_RAW) Text("Frame is double-height: showing the image half; the lower half is kept as unverified raw data (enable a decoder in Settings to interpret it).", color = RdColors.Amber, style = MaterialTheme.typography.bodySmall)
+                    if (f.layout == FrameLayout.STACKED_IMAGE_RAW) Text("Double-height frame decoded as: ${f.decodeInfo}. The other half is kept as raw data for the (opt-in) temperature decoders. Change in Settings → Stacked frame decoding.", color = RdColors.Amber, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -111,7 +111,7 @@ fun ThermalScreen(vm: RoboDogViewModel, onMap: () -> Unit, onStorage: () -> Unit
                     KeyValue("Max frame bytes", s.info.maxVideoFrameSize.toString())
                     KeyValue("FPS", "%.1f".format(stats.fps))
                     KeyValue("Frames / timeouts", "${stats.frames} / ${stats.timeouts}")
-                    frame?.let { KeyValue("Decoded", "${it.width}x${it.height} ${it.pixelFormat} seq ${it.sequence} ${if (it.hasChroma) "colour" else "mono"}") }
+                    frame?.let { KeyValue("Decoded", "${it.width}x${it.height} ${it.decodeInfo} seq ${it.sequence} ${if (it.hasChroma) "colour" else "mono"}") }
                 }
                 is UvcCamera.State.Error -> {
                     Text(s.message, color = RdColors.Red)

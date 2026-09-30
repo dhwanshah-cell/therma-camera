@@ -76,7 +76,7 @@ internal fun decodeLinear16(
 object StackedRaw16Kelvin64Decoder : RadiometricDecoder {
     override val id = "STACKED_RAW16_K64"
     override val label = "Stacked frame, raw16 = K×64 (experimental)"
-    override val description = "Lower half of a double-height frame holds 16-bit values; °C = value/64 − 273.15."
+    override val description = "The 16-bit raw half of a double-height frame; °C = value/64 − 273.15."
     override val experimental = true
     override fun decode(width: Int, height: Int, pixelFormat: UvcPixelFormat, layout: FrameLayout, intensity: IntArray, rawLowerHalf: ByteArray?): RadiometricResult? {
         if (layout != FrameLayout.STACKED_IMAGE_RAW || rawLowerHalf == null) return null

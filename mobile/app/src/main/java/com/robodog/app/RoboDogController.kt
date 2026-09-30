@@ -115,6 +115,7 @@ class RoboDogController(private val g: AppGraph) {
         _palette.value = ThermalPalette.fromName(s.palette)
         g.frameProcessor.decoder = RadiometricDecoders.byId(s.radiometricDecoderId)
         g.frameProcessor.stackedLayoutMode = runCatching { ThermalFrameProcessor.StackedLayoutMode.valueOf(s.stackedLayoutMode) }.getOrDefault(ThermalFrameProcessor.StackedLayoutMode.AUTO)
+        g.frameProcessor.stackedDecode = runCatching { ThermalFrameProcessor.StackedDecode.valueOf(s.stackedDecode) }.getOrDefault(ThermalFrameProcessor.StackedDecode.AUTO)
         g.uvcCamera.forcedFormatIndex = s.forcedFormatIndex.takeIf { it > 0 }
         g.uvcCamera.forcedFrameIndex = s.forcedFrameIndex.takeIf { it > 0 }
         g.backend.baseUrl = s.serverUrl

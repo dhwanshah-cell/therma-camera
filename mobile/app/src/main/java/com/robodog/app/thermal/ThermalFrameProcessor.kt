@@ -21,8 +21,39 @@ class ThermalFrameProcessor(
 ) {
     enum class StackedLayoutMode { AUTO, NEVER, ALWAYS }
 
+    /** How to read a double-height (image + raw) frame. AUTO picks the interpretation that looks like a real image. */
+    enum class StackedDecode(val label: String) {
+        AUTO("Auto-detect"),
+        YUY2_TOP("8-bit image, top half"),
+        YUY2_BOTTOM("8-bit image, bottom half"),
+        RAW16_TOP("16-bit raw, top half"),
+        RAW16_BOTTOM("16-bit raw, bottom half"),
+    }
+    var stackedDecode: StackedDecode = StackedDecode.AUTO
+    @Volatile var autoDecodeChoice: StackedDecode? = null
+        private set
+    @Volatile var autoDecodeScores: String = ""
+        private set
+    private var framesSinceAuto = 0
+
     private var intensityBuf = IntArray(0)
     private var colorBuf = IntArray(0)
+
+    /** Evaluate the four candidate interpretations of a stacked YUY2 frame and pick the smoothest. */
+    fun chooseStackedDecode(src: ByteArray, width: Int, imgH: Int): StackedDecode {
+        val n = width * imgH
+        val half = n * 2
+        fun le16(off: Int): (Int) -> Int = { i -> (src[i * 2 + off].toInt() and 0xFF) or ((src[i * 2 + 1 + off].toInt() and 0xFF) shl 8) }
+        fun luma(off: Int): (Int) -> Int = { i -> src[i * 2 + off].toInt() and 0xFF }
+        val scores = linkedMapOf(
+            StackedDecode.YUY2_TOP to PixelConverters.roughness(luma(0), width, imgH),
+            StackedDecode.YUY2_BOTTOM to PixelConverters.roughness(luma(half), width, imgH),
+            StackedDecode.RAW16_TOP to PixelConverters.roughness(le16(0), width, imgH),
+            StackedDecode.RAW16_BOTTOM to PixelConverters.roughness(le16(half), width, imgH),
+        )
+        autoDecodeScores = scores.entries.joinToString(" ") { "${it.key.name}=%.3f".format(it.value) }
+        return scores.minByOrNull { it.value }!!.key
+    }
 
     fun process(
         src: ByteArray,
@@ -52,14 +83,47 @@ class ThermalFrameProcessor(
         var bits = 8
         val range: IntRange
 
+        var decodeInfo = pixelFormat.name
+        var rawHalfOffset = if (stacked) n * 2 else -1 // where the 16-bit raw half starts (default: bottom)
+
         when (pixelFormat) {
             UvcPixelFormat.YUY2, UvcPixelFormat.UYVY -> {
                 if (length < n * 2) return null
                 val yFirst = pixelFormat == UvcPixelFormat.YUY2
-                range = PixelConverters.yuy2Luma(src, width, imgH, intensity, yFirst)
-                color = IntArray(n)
-                hasChroma = PixelConverters.yuy2ToArgb(src, width, imgH, color, yFirst)
-                if (!hasChroma) color = null
+                if (stacked && length >= n * 4) {
+                    // Decide which half is the picture and whether it is 8-bit YUV or 16-bit samples.
+                    var mode = stackedDecode
+                    if (mode == StackedDecode.AUTO) {
+                        if (autoDecodeChoice == null || framesSinceAuto >= 150) { autoDecodeChoice = chooseStackedDecode(src, width, imgH); framesSinceAuto = 0 }
+                        framesSinceAuto++
+                        mode = autoDecodeChoice!!
+                    }
+                    val topOff = 0; val botOff = n * 2
+                    when (mode) {
+                        StackedDecode.YUY2_TOP, StackedDecode.YUY2_BOTTOM -> {
+                            val off = if (mode == StackedDecode.YUY2_TOP) topOff else botOff
+                            range = PixelConverters.yuy2Luma(src, width, imgH, intensity, yFirst, off)
+                            color = IntArray(n)
+                            hasChroma = PixelConverters.yuy2ToArgb(src, width, imgH, color, yFirst, off)
+                            if (!hasChroma) color = null
+                            rawHalfOffset = if (mode == StackedDecode.YUY2_TOP) botOff else topOff
+                            decodeInfo = "8-bit image (${if (mode == StackedDecode.YUY2_TOP) "top" else "bottom"} half)"
+                        }
+                        else -> {
+                            val off = if (mode == StackedDecode.RAW16_TOP) topOff else botOff
+                            bits = 16
+                            range = PixelConverters.gray16(src, n, intensity, true, off)
+                            rawHalfOffset = off
+                            decodeInfo = "16-bit raw (${if (mode == StackedDecode.RAW16_TOP) "top" else "bottom"} half)"
+                        }
+                    }
+                    if (stackedDecode == StackedDecode.AUTO) decodeInfo += " auto"
+                } else {
+                    range = PixelConverters.yuy2Luma(src, width, imgH, intensity, yFirst)
+                    color = IntArray(n)
+                    hasChroma = PixelConverters.yuy2ToArgb(src, width, imgH, color, yFirst)
+                    if (!hasChroma) color = null
+                }
             }
             UvcPixelFormat.Y16 -> {
                 if (length < n * 2) return null
@@ -113,10 +177,9 @@ class ThermalFrameProcessor(
             UvcPixelFormat.H264 -> return null
         }
 
-        val lower: ByteArray? = if (stacked) {
+        val lower: ByteArray? = if (stacked && rawHalfOffset >= 0) {
             val bpp = if (pixelFormat == UvcPixelFormat.Y8) 1 else 2
-            val start = n * bpp
-            if (length >= start + n * bpp) src.copyOfRange(start, start + n * bpp) else null
+            if (length >= rawHalfOffset + n * bpp) src.copyOfRange(rawHalfOffset, rawHalfOffset + n * bpp) else null
         } else null
 
         val layout = if (stacked) FrameLayout.STACKED_IMAGE_RAW else FrameLayout.SINGLE
@@ -124,7 +187,7 @@ class ThermalFrameProcessor(
 
         return ThermalFrame(
             Ids.frame(), timestampMs, monotonicNs, sequence, width, imgH, width, height, pixelFormat,
-            intensity, bits, range.first, range.last, color, hasChroma, lower, radiometric, source, layout,
+            intensity, bits, range.first, range.last, color, hasChroma, lower, radiometric, source, layout, decodeInfo,
         )
     }
 
