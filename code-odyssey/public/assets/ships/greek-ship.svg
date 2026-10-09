@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="880" viewBox="0 0 600 440">
+  <!-- Original illustration: ancient Greek galley (penteconter) under moonlight.
+       Waterline sits at y=380 (13.6% from the bottom); the hero shader relies on that. -->
+  <defs>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a2d24"/>
+      <stop offset=".45" stop-color="#231a15"/>
+      <stop offset="1" stop-color="#0c0908"/>
+    </linearGradient>
+    <linearGradient id="sail" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8a2b2c"/>
+      <stop offset=".55" stop-color="#5e1a1e"/>
+      <stop offset="1" stop-color="#3a0f13"/>
+    </linearGradient>
+    <linearGradient id="sailShade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#000" stop-opacity=".35"/>
+      <stop offset=".4" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".75" stop-color="#9cc2dc" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".3"/>
+    </linearGradient>
+    <radialGradient id="shield" cx=".4" cy=".35" r=".7">
+      <stop offset="0" stop-color="#9c7c48"/>
+      <stop offset=".6" stop-color="#5a4426"/>
+      <stop offset="1" stop-color="#2a1f12"/>
+    </radialGradient>
+  </defs>
+
+  <!-- rigging (behind sail) -->
+  <g stroke="#6d7c88" stroke-width="1.1" fill="none" opacity=".7">
+    <path d="M292 38 L70 300"/>
+    <path d="M292 38 L530 286"/>
+    <path d="M292 38 L150 322"/>
+    <path d="M292 38 L440 322"/>
+  </g>
+
+  <!-- mast -->
+  <rect x="287" y="34" width="8" height="300" rx="2" fill="#2a1f18"/>
+  <rect x="293" y="34" width="2" height="300" fill="#8fa9bf" opacity=".35"/>
+
+  <!-- sail -->
+  <path d="M174 74 Q292 60 410 74 L398 252 Q292 272 186 252 Z" fill="url(#sail)"/>
+  <path d="M174 74 Q292 60 410 74 L398 252 Q292 272 186 252 Z" fill="url(#sailShade)"/>
+  <g stroke="#2a0a0d" stroke-width="1.2" opacity=".55" fill="none">
+    <path d="M206 72 Q210 160 210 256"/>
+    <path d="M238 69 Q244 160 241 260"/>
+    <path d="M270 66 Q276 162 272 263"/>
+    <path d="M314 66 Q310 162 313 264"/>
+    <path d="M346 69 Q340 160 344 261"/>
+    <path d="M378 72 Q372 160 374 257"/>
+    <path d="M178 118 Q292 108 406 118"/>
+    <path d="M181 164 Q292 158 403 164"/>
+    <path d="M184 210 Q292 208 400 210"/>
+  </g>
+  <!-- moonlit edge on the sail -->
+  <path d="M410 74 L398 252" stroke="#b9d0e2" stroke-width="1.5" opacity=".45"/>
+  <!-- sail emblem: a restrained gold eye/sun mark -->
+  <g opacity=".5" stroke="#c7a065" fill="none" stroke-width="2">
+    <circle cx="292" cy="162" r="22"/>
+    <circle cx="292" cy="162" r="7" fill="#c7a065" stroke="none"/>
+  </g>
+
+  <!-- yard -->
+  <path d="M164 76 Q292 58 420 76" stroke="#2a1f18" stroke-width="7" fill="none" stroke-linecap="round"/>
+  <path d="M164 74 Q292 56 420 74" stroke="#8fa9bf" stroke-width="1.2" fill="none" opacity=".35"/>
+
+  <!-- oars (reach below the waterline; visible in the underwater view) -->
+  <g stroke="#1d1611" stroke-width="3" stroke-linecap="round">
+    <path d="M150 350 L118 428"/><path d="M174 351 L142 429"/><path d="M198 352 L166 430"/>
+    <path d="M222 352 L190 430"/><path d="M246 353 L214 431"/><path d="M270 353 L238 431"/>
+    <path d="M294 353 L262 431"/><path d="M318 353 L286 431"/><path d="M342 352 L310 430"/>
+    <path d="M366 352 L334 430"/><path d="M390 351 L358 429"/><path d="M414 350 L382 428"/>
+    <path d="M438 349 L406 427"/><path d="M462 347 L430 425"/>
+  </g>
+  <g fill="#1d1611">
+    <ellipse cx="117" cy="430" rx="4" ry="9" transform="rotate(22 117 430)"/>
+    <ellipse cx="213" cy="433" rx="4" ry="9" transform="rotate(22 213 433)"/>
+    <ellipse cx="309" cy="432" rx="4" ry="9" transform="rotate(22 309 432)"/>
+    <ellipse cx="405" cy="429" rx="4" ry="9" transform="rotate(22 405 429)"/>
+  </g>
+
+  <!-- stern ornament (aphlaston) -->
+  <path d="M50 272 C40 232 50 198 78 194 C100 191 108 214 94 222 C84 228 76 218 84 210"
+        stroke="#2b2119" stroke-width="10" fill="none" stroke-linecap="round"/>
+  <path d="M46 262 C40 230 52 200 78 196" stroke="#a9c3d6" stroke-width="1.4" fill="none" opacity=".45"/>
+
+  <!-- hull -->
+  <path d="M558 372 L558 386 L520 391 C500 401 470 405 440 405 L172 405 C120 405 84 383 66 341
+           C56 317 50 293 48 268 L58 272 C70 300 96 320 130 326 C200 335 400 337 500 323
+           C512 311 520 297 530 285 L535 289 C527 311 523 341 521 367 Z" fill="url(#hull)"/>
+  <!-- planking -->
+  <g stroke="#4a3a2e" stroke-width="1.2" fill="none" opacity=".75">
+    <path d="M66 314 C100 340 160 346 300 348 C420 348 490 342 524 330"/>
+    <path d="M74 336 C110 360 170 366 300 367 C420 367 488 362 522 352"/>
+    <path d="M90 362 C130 380 180 384 300 385 C420 385 486 382 520 374"/>
+  </g>
+  <!-- gunwale rail with moonlight rim -->
+  <path d="M58 272 C70 300 96 320 130 326 C200 335 400 337 500 323 C512 311 520 297 530 285"
+        stroke="#b3cadb" stroke-width="1.6" fill="none" opacity=".55"/>
+  <!-- ram -->
+  <path d="M521 372 L566 374 L568 382 L521 386 Z" fill="#5b4a2c"/>
+  <path d="M521 372 L566 374" stroke="#c7a065" stroke-width="1.2" opacity=".7"/>
+  <!-- oar ports -->
+  <g fill="#070504">
+    <circle cx="150" cy="350" r="3"/><circle cx="174" cy="351" r="3"/><circle cx="198" cy="352" r="3"/>
+    <circle cx="222" cy="352" r="3"/><circle cx="246" cy="353" r="3"/><circle cx="270" cy="353" r="3"/>
+    <circle cx="294" cy="353" r="3"/><circle cx="318" cy="353" r="3"/><circle cx="342" cy="352" r="3"/>
+    <circle cx="366" cy="352" r="3"/><circle cx="390" cy="351" r="3"/><circle cx="414" cy="350" r="3"/>
+    <circle cx="438" cy="349" r="3"/><circle cx="462" cy="347" r="3"/>
+  </g>
+  <!-- shields along the rail -->
+  <g stroke="#c7a065" stroke-width="1" stroke-opacity=".6">
+    <circle cx="160" cy="324" r="9" fill="url(#shield)"/><circle cx="192" cy="327" r="9" fill="url(#shield)"/>
+    <circle cx="224" cy="329" r="9" fill="url(#shield)"/><circle cx="256" cy="330" r="9" fill="url(#shield)"/>
+    <circle cx="328" cy="331" r="9" fill="url(#shield)"/><circle cx="360" cy="330" r="9" fill="url(#shield)"/>
+    <circle cx="392" cy="329" r="9" fill="url(#shield)"/><circle cx="424" cy="327" r="9" fill="url(#shield)"/>
+    <circle cx="456" cy="324" r="9" fill="url(#shield)"/>
+  </g>
+  <!-- painted eye on the bow -->
+  <ellipse cx="503" cy="346" rx="11" ry="6" fill="#d9d2c0" opacity=".8"/>
+  <circle cx="505" cy="346" r="3.6" fill="#0b0807"/>
+</svg>
